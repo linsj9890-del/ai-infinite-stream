@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infinite Stream 3.0 - Architect & BGM</title>
+    <!-- 引入 Tone.js 用于纯前端生成程序化 AI 背景音乐 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --theme: #00f0ff;
+            --bg: #09090b;
+            --panel: rgba(24, 24, 27, 0.85);
+            --border: rgba(0, 240, 255, 0.3);
+            --text: #e4e4e7;
+            --text-muted: #a1a1aa;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Noto Sans SC', sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
+
+        /* 屏显容器 */
+        .screen { display: none; width: 100%; height: 100%; padding: 30px; }
+        .active { display: flex; justify-content: center; align-items: center; }
+
+        /* 输入组件通用样式 */
+        input, select, textarea { 
+            width: 100%; background: #000; border: 1px solid #3f3f46; color: #fff; 
+            padding: 12px 15px; border-radius: 6px; margin-bottom: 20px; outline: none; font-family: inherit; transition: 0.3s;
+        }
+        input:focus, select:focus, textarea:focus { border-color: var(--theme); box-shadow: 0 0 15px rgba(0,240,255,0.2); }
+        
+        button { 
+            background: rgba(0,240,255,0.1); border: 1px solid var(--theme); color: var(--theme); 
+            padding: 12px 30px; font-weight: bold; cursor: pointer; border-radius: 6px; transition: 0.3s; letter-spacing: 1px;
+        }
+        button:hover { background: var(--theme); color: #000; box-shadow: 0 0 20px var(--theme); }
+        button:disabled { border-color: #555; color: #555; cursor: not-allowed; background: transparent; box-shadow: none; }
+
+        /* 登录配置面板 */
+        .setup-box { width: 600px; max-width: 90%; background: var(--panel); padding: 40px; border-radius: 12px; border-top: 3px solid var(--theme); }
+        .setup-box h1 { margin-bottom: 30px; font-size: 24px; text-transform: uppercase; }
+        .form-row { display: flex; gap: 15px; }
+        .form-group { flex: 1; }
+        label { display: block; margin-bottom: 8px; font-size: 0.85em; color: var(--text-muted); }
+
+        /* 游戏界面布局 */
+        .game-layout { width: 100%; height: 100%; display: flex; gap: 20px; }
+        
+        /* 侧边栏：架构师系统助手 */
+        .sidebar { width: 320px; background: var(--panel); border: 1px solid #27272a; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; overflow-y: auto; }
+        .sidebar-title { color: var(--theme); font-size: 0.9em; border-bottom: 1px solid #27272a; padding-bottom: 10px; margin-bottom: 20px; font-weight: bold; }
+        
+        /* 音乐频谱动效指示器 */
+        .audio-indicator { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; font-size: 0.8em; color: var(--theme); background: rgba(0,240,255,0.05); padding: 10px; border-radius: 6px;}
+        .bars { display: flex; gap: 2px; height: 15px; align-items: flex-end; }
+        .bar { width: 3px; background: var(--theme); animation: eq 1s ease-in-out infinite alternate; }
+        .bar:nth-child(2) { animation-delay: 0.2s; } .bar:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes eq { 0% { height: 2px; } 100% { height: 15px; } }
+
+        /* 主推演区 */
+        .main-stage { flex: 1; background: var(--panel); border: 1px solid #27272a; border-radius: 12px; display: flex; flex-direction: column; padding: 20px; position: relative; }
+        .story-stream { flex: 1; overflow-y: auto; padding-right: 15px; margin-bottom: 20px; line-height: 1.8; font-size: 1.05em; scroll-behavior: smooth; }
+        
+        /* 剧情节点样式 */
+        .node { margin-bottom: 25px; animation: slideUp 0.4s ease-out; }
+        .node-player { text-align: right; color: #fff; }
+        .node-player span { display: inline-block; background: #27272a; padding: 10px 20px; border-radius: 20px 20px 0 20px; border-right: 2px solid var(--theme); }
+        .node-ai { border-left: 3px solid var(--theme); padding-left: 20px; background: linear-gradient(90deg, rgba(0,240,255,0.03), transparent); padding: 20px; border-radius: 0 12px 12px 0; }
+        
+        /* 推理链展示（针对 DeepSeek R1 等高级模型） */
+        .cot-box { font-size: 0.85em; color: #888; background: #000; padding: 10px 15px; border-radius: 6px; margin-bottom: 10px; border-left: 2px solid #555; }
+        .cot-toggle { cursor: pointer; color: var(--text-muted); font-size: 0.8em; margin-bottom: 5px; display: inline-block; }
+        .cot-toggle:hover { color: #fff; }
+
+        .input-bar { display: flex; gap: 15px; background: #000; padding: 10px; border-radius: 8px; border: 1px solid #27272a; }
+        .input-bar input { margin: 0; border: none; background: transparent; }
+
+        @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<!-- Screen 1: 系统登入与引擎设定 -->
+<div id="screenSetup" class="screen active">
+    <div class="setup-box">
+        <h1>System_Bootloader</h1>
+        
+        <div class="form-row">
+            <div class="form-group">
+                <label>AI 提供商 (Provider)</label>
+                <select id="selProvider" onchange="updateModels()">
+                    <option value="deepseek">DeepSeek 官方 API</option>
+                    <option value="xiaomi">Xiaomi MiMo 官方 API</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>核心推理模型 (Model Version)</label>
+                <select id="selModel"></select>
+            </div>
+        </div>
+
+        <label>鉴权密钥 (API KEY)</label>
+        <input type="password" id="inpApiKey" placeholder="sk-...">
+        
+        <div class="form-row">
+            <div class="form-group">
+                <label>玩家身份与特质</label>
+                <input type="text" id="inpPersona" value="携带旧时代图纸的流浪黑客">
+            </div>
+        </div>
+
+        <label>脑洞大开：你渴望创建一个怎样的世界？</label>
+        <textarea id="inpWorld" rows="3" placeholder="例如：一个由超级AI统治的赛博废土，人类依靠魔法抗击机械军团..."></textarea>
+        
+        <button id="btnBoot" onclick="bootGame()" style="width: 100%;">连接神经突触 (Enter)</button>
+        <div id="bootError" style="color: #ef4444; margin-top: 15px; font-size: 0.85em; text-align: center;"></div>
+    </div>
+</div>
+
+<!-- Screen 2: 主游戏引擎界面 -->
+<div id="screenGame" class="screen">
+    <div class="game-layout">
+        
+        <!-- 左侧：系统助手与设定热更 -->
+        <div class="sidebar">
+            <div class="audio-indicator" id="audioInd">
+                <div class="bars"><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>
+                <span id="audioText">BGM: INITIALIZING...</span>
+            </div>
+
+            <div class="sidebar-title">系统助手：世界观热重载</div>
+            <p style="font-size: 0.75em; color: var(--text-muted); margin-bottom: 15px;">当剧情逻辑偏离时，你可以直接修改以下底层设定，AI 将在下一次交互时强制对齐新设定。</p>
+            
+            <label>当前世界底层法则</label>
+            <textarea id="editWorld" rows="6" style="font-size: 0.85em;"></textarea>
+            
+            <label>当前玩家状态/装备/特质</label>
+            <textarea id="editPersona" rows="4" style="font-size: 0.85em;"></textarea>
+            
+            <button onclick="overrideSettings()" style="padding: 8px; font-size: 0.8em; width: 100%;">强制覆写设定</button>
+            <div id="overrideMsg" style="color: var(--theme); font-size: 0.8em; margin-top: 10px; text-align: center; opacity: 0; transition: 0.3s;">覆写成功！</div>
+        </div>
+
+        <!-- 右侧：剧情推演与交互 -->
+        <div class="main-stage">
+            <div class="story-stream" id="stream"></div>
+            <div class="input-bar">
+                <input type="text" id="inpAction" placeholder="输入你的行动/语言，按 Enter 键发送..." autocomplete="off">
+                <button id="btnAction" onclick="processAction()" style="padding: 10px 25px;">执行</button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    // 官方模型数据库映射
+    const MODEL_DB = {
+        deepseek: {
+            endpoint: "https://api.deepseek.com/chat/completions",
+            models: [
+                { id: "deepseek-reasoner", name: "DeepSeek R1 (深度思考/最强逻辑)" },
+                { id: "deepseek-chat", name: "DeepSeek V3 (高速/通用编剧)" },
+                { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro (最新旗舰)" }
+            ]
+        },
+        xiaomi: {
+            endpoint: "https://api.chatmimo.xiaomi.com/v1/chat/completions",
+            models: [
+                { id: "mimo-v2.5-pro", name: "MiMo V2.5 Pro (企业级旗舰)" },
+                { id: "mimo-v2-flash", name: "MiMo V2 Flash (极速响应)" }
+            ]
+        }
+    };
+
+    // 全局上下文
+    const CTX = {
+        endpoint: "", model: "", key: "",
+        worldRules: "", persona: "",
+        history: [] // 储存 OpenAI 格式的对话历史
+    };
+
+    // --- 初始化下拉菜单 ---
+    function updateModels() {
+        const provider = document.getElementById('selProvider').value;
+        const selModel = document.getElementById('selModel');
+        selModel.innerHTML = "";
+        MODEL_DB[provider].models.forEach(m => {
+            selModel.innerHTML += `<option value="${m.id}">${m.name}</option>`;
+        });
+    }
+    updateModels();
+
+    // --- 全局回车键绑定 ---
+    document.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            if (document.getElementById('screenSetup').classList.contains('active')) {
+                bootGame();
+            } else if (document.getElementById('screenGame').classList.contains('active')) {
+                // 防止在修改左侧文本域时误触发
+                if(document.activeElement.tagName !== 'TEXTAREA') {
+                    processAction();
+                }
+            }
+        }
+    });
+
+    // --- BGM 音乐引擎 (Tone.js) ---
+    const BGM = {
+        synth: null, loop: null, currentMood: "",
+        init() {
+            // 必须在用户点击或按键交互后调用 Tone.start()
+            Tone.start();
+            // 使用带有混响的合成器模拟空间感
+            const reverb = new Tone.Reverb(4).toDestination();
+            this.synth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "sine" },
+                envelope: { attack: 2, decay: 1, sustain: 0.5, release: 5 }
+            }).connect(reverb);
+            this.synth.volume.value = -15; // 降低音量作为背景音
+            Tone.Transport.start();
+        },
+        setMood(moodStr) {
+            const mood = (moodStr || "peaceful").toLowerCase();
+            if (this.currentMood === mood) return;
+            this.currentMood = mood;
+            
+            if (this.loop) this.loop.stop();
+            
+            document.getElementById('audioText').innerText = `BGM: ${mood.toUpperCase()}`;
+            document.getElementById('audioInd').style.color = (mood.includes('tense') || mood.includes('combat')) ? '#ff4444' : 'var(--theme)';
+
+            // 根据 AI 返回的情绪关键词程序化生成音符
+            let notes, interval;
+            if (mood.includes("dark") || mood.includes("tense") || mood.includes("combat")) {
+                notes = ["C2", "Eb2", "F2", "G2"]; // 小调，压抑感
+                interval = "2n";
+            } else if (mood.includes("epic") || mood.includes("grand")) {
+                notes = ["C3", "G3", "C4", "Eb4"]; // 宏大感
+                interval = "1n";
+            } else {
+                notes = ["C3", "D3", "E3", "G3", "A3"]; // 宁静，探索感
+                interval = "1m";
+            }
+
+            this.loop = new Tone.Loop(time => {
+                const note = notes[Math.floor(Math.random() * notes.length)];
+                this.synth.triggerAttackRelease(note, "2n", time);
+            }, interval).start(0);
+        }
+    };
+
+    // --- 核心网络请求 ---
+    async function fetchAI(prompt, systemPrompt) {
+        const messages = [{ role: "system", content: systemPrompt }, ...CTX.history, { role: "user", content: prompt }];
+        
+        const payload = {
+            model: CTX.model,
+            messages: messages,
+            temperature: 0.7
+        };
+
+        const res = await fetch(CTX.endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${CTX.key}` },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+            const err = await res.text();
+            throw new Error(`API 请求失败 (状态码: ${res.status}): ${err}`);
+        }
+
+        const data = await res.json();
+        
+        // DeepSeek R1 模型特有的思维链字段处理
+        let reasoning = "";
+        if (data.choices[0].message.reasoning_content) {
+            reasoning = data.choices[0].message.reasoning_content;
+        }
+        
+        const content = data.choices[0].message.content;
+        
+        // 将成功对话存入历史记录 (保证上下文连贯)
+        CTX.history.push({ role: "user", content: prompt });
+        CTX.history.push({ role: "assistant", content: content });
+        
+        // 截断历史记录防止 Token 爆表 (保留最近 10 条对话)
+        if (CTX.history.length > 20) CTX.history = CTX.history.slice(CTX.history.length - 20);
+
+        return { content, reasoning };
+    }
+
+    // --- 启动流程 ---
+    async function bootGame() {
+        const errBox = document.getElementById('bootError');
+        const btn = document.getElementById('btnBoot');
+        
+        try {
+            CTX.key = document.getElementById('inpApiKey').value.trim();
+            if(!CTX.key) throw new Error("必须提供 API KEY 才能连接神经网络。");
+
+            const provider = document.getElementById('selProvider').value;
+            CTX.endpoint = MODEL_DB[provider].endpoint;
+            CTX.model = document.getElementById('selModel').value;
+            CTX.persona = document.getElementById('inpPersona').value;
+            const worldConcept = document.getElementById('inpWorld').value;
+
+            btn.disabled = true;
+            btn.innerText = "世界观构建推演中...";
+            errBox.innerText = "";
+
+            // 初始化背景音乐引擎
+            BGM.init();
+
+            // 架构师初始提示词：让 AI 将玩家简略的脑洞扩展为严谨的世界法则
+            const sysArch = `你是一个世界架构师。玩家提出了一个初步的世界概念：“${worldConcept}”。玩家扮演的角色是：“${CTX.persona}”。
+            请你完善这个世界的底层物理/社会法则，并描写玩家刚降生时的情景（约 150 字）。
+            你的回复必须包含两部分：
+            1. [法则]：概括世界核心规则（用于后续逻辑校验）。
+            2. [开局]：环境描写。
+            3. [音乐标签]：在结尾必须包含如 [MOOD: peaceful] 或 [MOOD: dark]。`;
+
+            const res = await fetchAI("开始创世演算", sysArch);
+            
+            // 简单解析 AI 返回的 法则 和 开局
+            let rulesMatch = res.content.match(/\[法则\]：?([\s\S]*?)\[开局\]/);
+            CTX.worldRules = rulesMatch ? rulesMatch[1].trim() : worldConcept; // 如果没匹配到，用玩家原话兜底
+
+            // 切换屏幕
+            document.getElementById('screenSetup').classList.remove('active');
+            document.getElementById('screenGame').classList.add('active');
+
+            // 填充左侧助手设定
+            document.getElementById('editWorld').value = CTX.worldRules;
+            document.getElementById('editPersona').value = CTX.persona;
+
+            appendAIStory(res.content, res.reasoning);
+
+        } catch (e) {
+            errBox.innerText = e.message;
+            btn.disabled = false;
+            btn.innerText = "连接神经突触 (Enter)";
+        }
+    }
+
+    // --- 侧边栏：覆写设定 ---
+    function overrideSettings() {
+        CTX.worldRules = document.getElementById('editWorld').value;
+        CTX.persona = document.getElementById('editPersona').value;
+        const msg = document.getElementById('overrideMsg');
+        msg.style.opacity = 1;
+        setTimeout(() => { msg.style.opacity = 0; }, 2000);
+    }
+
+    // --- 核心交互逻辑 ---
+    async function processAction() {
+        const inp = document.getElementById('inpAction');
+        const btn = document.getElementById('btnAction');
+        const action = inp.value.trim();
+        if(!action) return;
+
+        // UI 锁定与表现
+        inp.value = '';
+        inp.disabled = btn.disabled = true;
+        
+        const stream = document.getElementById('stream');
+        stream.innerHTML += `<div class="node node-player"><span>${action}</span></div>`;
+        stream.scrollTop = stream.scrollHeight;
+
+        // 强迫症级别的 System Prompt：每次对话都强行注入最新的法则和玩家状态，防止吃书
+        const sysPrompt = `你是一个高自由度无限流游戏的 AI 引擎。
+【世界核心绝对法则】：${CTX.worldRules}
+【玩家当前特质/状态】：${CTX.persona}
+
+玩家刚刚采取了行动。请根据世界法则和玩家状态判断结果是否合理。描写后续剧情（不超过150字），并将决定权交还给玩家。
+必须在回复的最后一行提供一个情绪指令，格式严格为：[MOOD: 情绪词]，情绪词可选：peaceful, tense, dark, epic, combat。`;
+
+        try {
+            const res = await fetchAI(`我的行动是：${action}`, sysPrompt);
+            appendAIStory(res.content, res.reasoning);
+        } catch (e) {
+            stream.innerHTML += `<div class="node node-ai" style="border-color:#ff4444; color:#ff4444;">[系统阻断] ${e.message}</div>`;
+        } finally {
+            inp.disabled = btn.disabled = false;
+            inp.focus();
+        }
+    }
+
+    // --- 渲染 AI 回复与音乐提取 ---
+    function appendAIStory(content, reasoning) {
+        const stream = document.getElementById('stream');
+        
+        // 提取 MOOD 标签并更新音乐
+        let cleanContent = content;
+        const moodMatch = content.match(/\[MOOD:\s*([a-zA-Z]+)\]/i);
+        if (moodMatch) {
+            BGM.setMood(moodMatch[1]);
+            cleanContent = content.replace(/\[MOOD:\s*[a-zA-Z]+\]/gi, ''); // 在 UI 中隐藏这个系统标签
+        }
+
+        let html = `<div class="node node-ai">`;
+        
+        // 如果使用了 R1 模型，展示折叠的思维链
+        if (reasoning) {
+            const cid = 'cot_' + Math.random().toString(36).substr(2, 9);
+            html += `<div class="cot-toggle" onclick="document.getElementById('${cid}').style.display = document.getElementById('${cid}').style.display === 'none' ? 'block' : 'none'">[+] 展开/折叠 DeepSeek 深度思考过程</div>`;
+            html += `<div id="${cid}" class="cot-box" style="display:none;">${reasoning.replace(/\n/g, '<br>')}</div>`;
+        }
+        
+        html += `<div>${cleanContent.replace(/\n/g, '<br>')}</div></div>`;
+        stream.innerHTML += html;
+        stream.scrollTop = stream.scrollHeight;
+    }
+</script>
+</body>
+</html>
