@@ -1,0 +1,1434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infinite Stream 8.0 - World Engine</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;700&family=Noto+Sans+SC:wght@300;400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --theme: #00f0ff;
+            --bg: #050505;
+            --panel: rgba(15, 15, 18, 0.9);
+            --border: rgba(0, 240, 255, 0.3);
+            --text: #e5e5e5;
+            --text-muted: #666;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Noto Sans SC', sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+
+        .screen { display: none; width: 100%; height: 100%; padding: 20px; }
+        .active { display: flex; justify-content: center; align-items: center; }
+
+        input, select, textarea {
+            width: 100%; background: rgba(0,0,0,0.6); border: 1px solid #333; color: #fff;
+            padding: 12px 15px; border-radius: 4px; margin-bottom: 15px; outline: none; font-family: inherit; transition: 0.3s;
+        }
+        input:focus, select:focus, textarea:focus { border-color: var(--theme); box-shadow: 0 0 15px rgba(0, 240, 255, 0.15); }
+
+        button {
+            background: transparent; border: 1px solid var(--theme); color: var(--theme);
+            padding: 12px 20px; font-weight: bold; cursor: pointer; border-radius: 4px; transition: 0.3s; letter-spacing: 1px;
+        }
+        button:hover { background: var(--theme); color: #000; box-shadow: 0 0 20px var(--theme); }
+        button:disabled { border-color: #444; color: #444; cursor: not-allowed; background: transparent; box-shadow: none; }
+
+        .btn-alt { border-color: #555; color: #aaa; }
+        .btn-alt:hover { background: #333; color: #fff; box-shadow: none; border-color: #fff;}
+
+        .btn-epic { margin-top: auto; border-color: #d4af37; color: #d4af37; }
+        .btn-epic:hover { background: #d4af37; color: #000; box-shadow: 0 0 20px #d4af37; border-color: #d4af37;}
+
+        .setup-box { width: 700px; max-width: 90%; background: var(--panel); padding: 40px; border-radius: 12px; border-top: 2px solid var(--theme); box-shadow: 0 20px 50px rgba(0,0,0,0.9); max-height: 95vh; overflow-y: auto;}
+        .setup-box h1 { margin-bottom: 25px; font-size: 26px; text-transform: uppercase; font-family: 'Noto Serif SC', serif; letter-spacing: 3px; color: var(--theme); text-align: center;}
+
+        .form-row { display: flex; gap: 15px; }
+        .form-group { flex: 1; }
+        label { display: block; margin-bottom: 6px; font-size: 0.85em; color: var(--text-muted); }
+
+        .game-layout { width: 100%; height: 100%; display: flex; gap: 20px; max-width: 1600px; margin: 0 auto; }
+        .sidebar { width: 320px; background: var(--panel); border: 1px solid #1a1a1a; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; overflow-y: auto; gap: 8px; }
+        .sidebar-title { color: var(--theme); font-size: 0.9em; border-bottom: 1px solid #1a1a1a; padding-bottom: 10px; margin-bottom: 5px; font-weight: bold; font-family: 'Noto Serif SC', serif; letter-spacing: 1px;}
+
+        .audio-indicator { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; font-size: 0.75em; color: var(--theme); }
+        .bars { display: flex; gap: 2px; height: 12px; align-items: flex-end; }
+        .bar { width: 2px; background: var(--theme); animation: eq 1s ease-in-out infinite alternate; }
+        .bar:nth-child(2) { animation-delay: 0.2s; } .bar:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes eq { 0% { height: 2px; } 100% { height: 12px; } }
+
+        .main-stage { flex: 1; display: flex; flex-direction: column; position: relative; }
+
+        .blur-focus { filter: blur(10px); animation: focusIn 3s ease-out 1.5s forwards; }
+        @keyframes focusIn { to { filter: blur(0); } }
+
+        .story-stream { flex: 1; overflow-y: auto; padding: 20px 40px; margin-bottom: 20px; line-height: 2; font-size: 1.15em; scroll-behavior: smooth; font-family: 'Noto Serif SC', serif; color: #d1d1d1; }
+
+        .node { margin-bottom: 30px; animation: slideUp 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+        .node-player { text-align: right; color: var(--theme); font-family: 'Noto Sans SC', sans-serif; font-size: 0.9em; letter-spacing: 1px; opacity: 0.8;}
+        .node-ai { padding-left: 20px; text-shadow: 0 2px 4px rgba(0,0,0,0.8); border-left: 2px solid rgba(0,240,255,0.1);}
+
+        .input-bar { display: flex; gap: 15px; background: var(--panel); padding: 15px 20px; border-radius: 8px; border: 1px solid #1a1a1a; }
+        .input-bar input { margin: 0; border: none; background: transparent; font-size: 1.1em; }
+
+        #eyeOverlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 9999;
+            display: none; flex-direction: column; pointer-events: none;
+        }
+        .eyelid { width: 100%; height: 50vh; background: #000; transition: transform 2.5s cubic-bezier(0.7, 0, 0.3, 1); }
+        #lidTop { transform-origin: top; }
+        #lidBottom { transform-origin: bottom; }
+        .eyes-open #lidTop { transform: scaleY(0); }
+        .eyes-open #lidBottom { transform: scaleY(0); }
+
+        .dice-btn { background: rgba(255,255,255,0.05); border: 1px dashed #555; color: #aaa; width: 100%; margin-bottom: 20px; }
+        .dice-btn:hover { border-color: var(--theme); color: var(--theme); background: rgba(0,240,255,0.05); }
+        .dice-mini { cursor:pointer; font-size:1rem; margin-left:4px; transition:.2s; user-select:none; } .dice-mini:hover { filter:brightness(1.5); }
+
+        #epicModal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 10000;
+            display: none; justify-content: center; align-items: center; backdrop-filter: blur(5px);
+        }
+        .epic-content {
+            background: #0a0a0a; border: 1px solid #d4af37; max-width: 800px; width: 90%; max-height: 90vh;
+            padding: 50px; border-radius: 8px; overflow-y: auto; text-align: center; font-family: 'Noto Serif SC', serif;
+            box-shadow: 0 0 50px rgba(212, 175, 55, 0.15); animation: fadeIn 1s ease; display: flex; flex-direction: column;
+        }
+        .epic-title { font-size: 32px; color: #d4af37; margin-bottom: 30px; letter-spacing: 5px; }
+        .epic-text { font-size: 1.1em; line-height: 2; color: #ccc; text-align: justify; white-space: pre-line; margin-bottom: 40px; flex: 1; overflow-y: auto; padding-right: 10px;}
+        .epic-actions { display: flex; gap: 20px; justify-content: center; border-top: 1px solid #333; padding-top: 20px;}
+
+        /* 加载指示器 */
+        #loadingOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9998;
+            display: none; justify-content: center; align-items: center;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(2px);
+        }
+        #loadingOverlay.show { display: flex; }
+        .spinner { width: 40px; height: 40px; border: 3px solid #333; border-top-color: var(--theme); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* 状态栏样式 */
+        .stat-row { display: flex; align-items: center; gap: 8px; font-size: 0.8em; margin: 4px 0; }
+        .stat-label { width: 50px; color: var(--text-muted); flex-shrink: 0; }
+        .stat-bar { flex: 1; height: 6px; background: #1a1a1a; border-radius: 3px; overflow: hidden; }
+        .stat-fill { height: 100%; border-radius: 3px; transition: width 0.8s ease; }
+        .stat-fill.hp { background: #44cc88; }
+        .stat-fill.sanity { background: #8866dd; }
+        .stat-fill.energy { background: #dd8844; }
+        .stat-val { width: 30px; text-align: right; font-size: 0.85em; }
+
+        .tag { display: inline-block; background: rgba(0,240,255,0.1); border: 1px solid rgba(0,240,255,0.25); color: var(--theme); font-size: 0.7em; padding: 2px 8px; border-radius: 10px; margin: 2px; }
+        .tag-item { display: inline-block; background: rgba(255,255,255,0.05); border: 1px solid #333; color: #aaa; font-size: 0.7em; padding: 2px 8px; border-radius: 10px; margin: 2px; }
+
+        .world-section { margin: 6px 0; }
+        .world-section summary { cursor: pointer; color: var(--text-muted); font-size: 0.75em; letter-spacing: 1px; padding: 4px 0; }
+        .world-section summary:hover { color: var(--theme); }
+        .world-section .content { font-size: 0.75em; color: #999; padding: 4px 0 4px 12px; line-height: 1.6; }
+
+        .timeline-item { font-size: 0.7em; color: #777; padding: 3px 0; border-bottom: 1px solid #111; display: flex; gap: 6px; }
+        .timeline-turn { color: var(--theme); opacity: 0.6; flex-shrink: 0; }
+
+        /* ======== 场景图片 ======== */
+        .scene-image { margin: 16px 0 16px 20px; border-radius: 6px; max-width: 100%; border: 1px solid #333; opacity: 0; animation: fadeIn 1s ease forwards; }
+        .scene-image.loaded { opacity: 1; }
+        .img-btn { font-size:0.7em; padding:4px 12px; border-color:#555; color:#888; margin-left:20px; cursor:pointer; }
+        .img-btn:hover { border-color:var(--theme); color:var(--theme); }
+
+        /* ======== 分享 & 导出面板 ======== */
+        .share-section { border-top: 1px solid #333; margin-top: 20px; padding-top: 20px; text-align: center; }
+        .share-section input { font-size:0.75em; padding:8px; text-align:center; color:#aaa; margin:8px 0; }
+        #qrcode { display: inline-block; margin: 10px auto; padding: 10px; background: #fff; border-radius: 4px; }
+        #qrcode img { display: block; }
+        .share-hint { font-size:0.75em; color:#666; margin: 8px 0; }
+
+        /* ======== 模板按钮行 ======== */
+        .template-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 15px; }
+        .template-btn { font-size: 0.7em; padding: 6px 12px; border-color: #444; color: #999; flex: 1; min-width: 80px; }
+        .template-btn:hover { border-color: var(--theme); color: var(--theme); }
+
+        /* ======== 移动端适配 ======== */
+        .sidebar-toggle { display: none; position: fixed; top: 16px; right: 16px; z-index: 100; padding: 8px 14px; font-size: 0.8em; border-color: #555; color: #aaa; background: rgba(0,0,0,0.8); }
+        .sidebar-toggle:hover { border-color: var(--theme); color: var(--theme); }
+        .sidebar-overlay { display: none; }
+        @media (max-width: 768px) {
+            .game-layout { flex-direction: column; gap: 0; }
+            .sidebar { position: fixed; top: 0; right: -340px; width: 320px; height: 100vh; z-index: 200; transition: right 0.3s ease; border-radius: 0; border-left: 1px solid #333; }
+            .sidebar.open { right: 0; }
+            .sidebar-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 199; }
+            .sidebar-overlay.show { display: block; }
+            .sidebar-toggle { display: block; }
+            .story-stream { padding: 10px 16px; font-size: 1em; }
+            .input-bar { padding: 10px 12px; }
+        }
+
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+<input type="file" id="fileLoad" style="display: none;" accept=".json" onchange="handleLoadGame(event)">
+
+<div id="epicModal">
+    <div class="epic-content">
+        <h2 class="epic-title" id="epicTitle">世界铸印中...</h2>
+        <div class="epic-text" id="epicText">时空记录者正在回溯你的旅程，提炼这个独一无二的宇宙。<br><br><i>(需要处理全局因果记录，请等待...)</i></div>
+        <div class="epic-actions" id="epicActions" style="display: none;">
+            <button onclick="exportWorldBook()" style="border-color:#d4af37; color:#d4af37;">📖 导出世界之书</button>
+            <button onclick="downloadSaveFile()" style="border-color:#d4af37; color:#d4af37;">刻印世界之核 (下载存档)</button>
+            <button class="btn-alt" onclick="document.getElementById('epicModal').style.display='none'">继续当前旅程</button>
+        </div>
+        <div class="share-section" id="shareSection" style="display:none;">
+            <div style="font-size:0.85em; color:#d4af37; margin-bottom:10px;">✨ 铭刻之页 — 分享你的世界</div>
+            <div id="qrcode"></div>
+            <div class="share-hint">扫描二维码或复制下方链接，让他人从你的世界起点出发</div>
+            <input type="text" id="shareUrl" readonly onclick="this.select();navigator.clipboard?.writeText(this.value)">
+        </div>
+    </div>
+</div>
+
+<div id="loadingOverlay"><div class="spinner"></div></div>
+
+<div id="eyeOverlay">
+    <div id="lidTop" class="eyelid"></div>
+    <div id="lidBottom" class="eyelid"></div>
+</div>
+
+<!-- Screen 1: 登录与引擎设定 -->
+<div id="screenSetup" class="screen active">
+    <div class="setup-box">
+        <h1>AWAKEN YOUR WORLD</h1>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>算力引擎 (Provider)</label>
+                <select id="selProvider" onchange="updateModels()">
+                    <option value="openai">OpenAI</option>
+                    <option value="deepseek">DeepSeek</option>
+                    <option value="xiaomi">Xiaomi MiMo</option>
+                    <option value="openrouter">OpenRouter</option>
+                    <option value="groq">Groq</option>
+                    <option value="together">Together</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>核心 (Model)</label>
+                <select id="selModel"></select>
+            </div>
+        </div>
+
+        <label>引擎密令 (API KEY) <span style="color:#ff5555">*必填</span></label>
+        <input type="password" id="inpApiKey" placeholder="输入密钥以激活引擎...">
+
+        <label>CORS 代理 <span style="color:#888; font-size:0.8em;">(API 若被浏览器跨域拦截时填写)</span></label>
+        <input type="text" id="inpProxy" placeholder="例如 https://corsproxy.io/? 留空则直连">
+
+        <label>⏳ 世界自动演进间隔 <span style="color:#ffaa55; font-size:0.75em;">(分钟·无操作时 AI 会主动推动时间、制造事件)</span></label>
+        <input type="number" id="inpIdle" value="3" min="1" max="30" style="width:80px;">
+        <span style="font-size:0.7em; color:#666; display:block; margin-top:-10px; margin-bottom:10px;">设为较大值可安心思考，设为较小值世界会更「主动」</span>
+
+        <div style="border-top: 1px solid #222; margin: 25px 0;"></div>
+
+        <button class="dice-btn" id="btnDice" onclick="rollDestiny()">🎲 掷入命运之轮 (AI随机生成全套脑洞)</button>
+
+        
+
+        <div class="form-row">
+            <div class="form-group"><label>【世界法则】<span class="dice-mini" onclick="rollWorld()">🎲</span></label><input type="text" id="inpWorld" value="深海封闭堡垒，人类靠提取荧光水母生存"></div>
+            <div class="form-group"><label>【叙事风格】<span class="dice-mini" onclick="rollStyle()">🎲</span></label><input type="text" id="inpStyle" value="克苏鲁恐怖 / 压抑"></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>【你的身份】<span class="dice-mini" onclick="rollPersona()">🎲</span></label><input type="text" id="inpPersona" value="即将变异的潜水员"></div>
+            <div class="form-group"><label>【初始执念】<span class="dice-mini" onclick="rollGoal()">🎲</span></label><input type="text" id="inpGoal" value="找到传说中能见到太阳的舱门"></div>
+        </div>
+
+        <div style="border-top: 1px solid #222; margin: 15px 0;"></div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>图像引擎</label>
+                <select id="selImageProvider" onchange="toggleImageProvider()">
+                    <option value="pollinations">Pollinations (免费)</option>
+                    <option value="custom">自定义 API</option>
+                </select>
+            </div>
+            <div class="form-group" id="imgCustomGroup" style="display:none;">
+                <label>图像 API 地址</label>
+                <input type="text" id="inpImageEndpoint" placeholder="https://api.example.com/v1/images/generations">
+            </div>
+        </div>
+        <div class="form-row" id="imgKeyRow" style="display:none;">
+            <div class="form-group">
+                <label>图像 API Key</label>
+                <input type="password" id="inpImageKey" placeholder="选填（Pollinations 不需要）">
+            </div>
+            <div class="form-group">
+                <label>图像模型</label>
+                <input type="text" id="inpImageModel" placeholder="例如 dall-e-3（选填）">
+            </div>
+        </div>
+
+        <div class="form-row" style="margin-top: 15px;">
+            <button id="btnBoot" onclick="startDiveSequence()" style="flex: 2;">👁️ 连接神经突触 (进入世界)</button>
+            <button class="btn-alt" onclick="document.getElementById('fileLoad').click()" style="flex: 1;">唤醒旧世界 (读档)</button>
+        </div>
+
+        <div id="bootError" style="color: #ef4444; margin-top: 15px; font-size: 0.85em; text-align: center;"></div>
+    </div>
+</div>
+
+<!-- Screen 2: 核心引擎流 -->
+<div id="screenGame" class="screen">
+    <div class="game-layout">
+
+        <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+        <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">☰ 世界</button>
+        <div class="sidebar" id="sidebar">
+            <div class="audio-indicator" id="audioInd">
+                <div class="bars"><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>
+                <span id="audioText">BGM: NEURAL LINK...</span>
+            </div>
+
+            <div class="sidebar-title">生命体征</div>
+            <div id="statsDisplay"></div>
+
+            <div class="sidebar-title">特质 & 物品</div>
+            <div id="traitsDisplay" style="font-size:0.85em; min-height:20px; margin-bottom:8px;"></div>
+
+            <div class="sidebar-title">世界脉络</div>
+
+            <details class="world-section">
+                <summary>世界法则</summary>
+                <div class="content" id="detailWorld"></div>
+            </details>
+            <details class="world-section">
+                <summary>身份 & 执念</summary>
+                <div class="content" id="detailPersona"></div>
+            </details>
+            <details class="world-section">
+                <summary>叙事风格</summary>
+                <div class="content" id="detailStyle"></div>
+            </details>
+
+            <details class="world-section">
+                <summary>已探索地点</summary>
+                <div class="content" id="detailLocations"><span style="color:#555;">尚未记录</span></div>
+            </details>
+            <details class="world-section" id="timelineSection">
+                <summary>旅程时间线</summary>
+                <div class="content" id="detailTimeline"></div>
+            </details>
+
+            <div style="border-top:1px solid #1a1a1a; margin:8px 0;"></div>
+            <label style="font-size:0.75em; color:#555;">紧急覆写（手动修改后点下方按钮生效）</label>
+            <textarea id="editWorld" rows="1" style="font-size:0.75em; color:#888;" placeholder="世界法则"></textarea>
+            <textarea id="editPersona" rows="1" style="font-size:0.75em; color:#888;" placeholder="身份与执念"></textarea>
+            <input type="text" id="editStyle" style="font-size:0.75em; color:#888; margin-bottom:4px;" placeholder="叙事风格">
+
+            <button onclick="overrideSettings()" style="padding: 8px; font-size: 0.75em; width: 100%;">强制重构现实</button>
+            <button onclick="generateSceneImage()" style="padding: 8px; font-size: 0.75em; width: 100%; border-color:#555; color:#888;">🎨 生成当前场景图像</button>
+            <button class="btn-epic" onclick="crystallizeWorld()">凝聚世界之书 (结算/存档)</button>
+        </div>
+
+        <div class="main-stage">
+            <div class="story-stream blur-focus" id="stream"></div>
+            <div class="input-bar">
+                <input type="text" id="inpAction" placeholder="世界在等你行动，输入决定并按 Enter..." autocomplete="off">
+                <button id="btnAction" onclick="processAction()">衍 化</button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    // ==========================================
+    // 模型数据库
+    // ==========================================
+    const MODEL_DB = {
+        deepseek: {
+            endpoint: "https://api.deepseek.com/chat/completions",
+            models: [
+                { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro (旗舰)" },
+                { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash (极速)" },
+                { id: "deepseek-chat", name: "DeepSeek V3 (经济)" }
+            ]
+        },
+        xiaomi: {
+            endpoint: "https://api.chatmimo.xiaomi.com/v1/chat/completions",
+            models: [
+                { id: "mimo-v2.5-pro", name: "MiMo V2.5 Pro (旗舰)" },
+                { id: "mimo-v2-pro", name: "MiMo V2 Pro" },
+                { id: "mimo-v2.5", name: "MiMo V2.5" },
+                { id: "mimo-v2-flash", name: "MiMo V2 Flash (极速)" }
+            ]
+        },
+        openai: {
+            endpoint: "https://api.openai.com/v1/chat/completions",
+            models: [
+                { id: "gpt-4o", name: "GPT-4o" },
+                { id: "gpt-4o-mini", name: "GPT-4o Mini (经济)" },
+                { id: "gpt-4.1", name: "GPT-4.1" },
+                { id: "o3-mini", name: "o3 Mini (推理)" }
+            ]
+        },
+        openrouter: {
+            endpoint: "https://openrouter.ai/api/v1/chat/completions",
+            models: [
+                { id: "openai/gpt-4o", name: "GPT-4o (OpenRouter)" },
+                { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet" },
+                { id: "google/gemini-2.0-flash", name: "Gemini 2.0 Flash" },
+                { id: "meta-llama/llama-4-scout", name: "Llama 4 Scout" }
+            ]
+        },
+        groq: {
+            endpoint: "https://api.groq.com/openai/v1/chat/completions",
+            models: [
+                { id: "llama-4-scout-17b-16e-instruct", name: "Llama 4 Scout" },
+                { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B" },
+                { id: "mixtral-8x7b-32768", name: "Mixtral 8x7B" }
+            ]
+        },
+        together: {
+            endpoint: "https://api.together.xyz/v1/chat/completions",
+            models: [
+                { id: "meta-llama/Llama-4-Scout-17B-16E-Instruct", name: "Llama 4 Scout" },
+                { id: "mistralai/Mixtral-8x22B-Instruct-v0.1", name: "Mixtral 8x22B" },
+                { id: "Qwen/Qwen3-235B-A22B", name: "Qwen3 235B" }
+            ]
+        }
+    };
+
+    // ==========================================
+    // 结构化世界状态
+    // ==========================================
+    const WORLD = {
+        rules: "",
+        style: "",
+        player: {
+            identity: "",
+            goal: "",
+            traits: [],
+            inventory: [],
+            stats: { hp: 100, sanity: 100, energy: 100 }
+        },
+        locations: [],
+        flags: {},
+        timeline: [],
+        memory: "",
+        turn: 0
+    };
+
+    let CTX = { endpoint: "", model: "", key: "", proxyUrl: "", idleMinutes: 3, history: [], fullLog: "", epicTitle: "", gameActive: false };
+    window.addEventListener("beforeunload", e => {
+        if (CTX.gameActive) { e.preventDefault(); e.returnValue = ""; }
+    });
+    let idleTimer = null;
+
+    function showLoading() { document.getElementById('loadingOverlay').classList.add('show'); }
+    function hideLoading() { document.getElementById('loadingOverlay').classList.remove('show'); }
+
+    // ==========================================
+    // 移动端侧边栏
+    // ==========================================
+    function toggleSidebar() {
+        document.getElementById('sidebar').classList.toggle('open');
+        document.getElementById('sidebarOverlay').classList.toggle('show');
+    }
+
+    // ==========================================
+    // 世界模板库
+    // ==========================================
+    const TEMPLATES = {};
+
+    function loadTemplate(name) {
+        // 预留模板接口
+    }
+
+    // ==========================================
+    // 图像提供商切换
+    // ==========================================
+    function toggleImageProvider() {
+        const val = document.getElementById('selImageProvider').value;
+        document.getElementById('imgCustomGroup').style.display = val === 'custom' ? 'block' : 'none';
+        document.getElementById('imgKeyRow').style.display = val === 'custom' ? 'flex' : 'none';
+    }
+
+    function updateModels() {
+        const provider = document.getElementById('selProvider').value;
+        const selModel = document.getElementById('selModel');
+        selModel.innerHTML = "";
+        MODEL_DB[provider].models.forEach(m => selModel.innerHTML += `<option value="${m.id}">${m.name}</option>`);
+    }
+    updateModels();
+    toggleImageProvider();
+
+    document.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            if (document.getElementById('screenSetup').classList.contains('active')) startDiveSequence();
+            else if (document.getElementById('screenGame').classList.contains('active') && document.activeElement.tagName !== 'TEXTAREA') {
+                if(document.getElementById('inpAction').value.trim() !== "") {
+                    processAction();
+                }
+            }
+        }
+    });
+
+    // ==========================================
+    // 视听引擎
+    // ==========================================
+    const AudioVisual = {
+        synth: null, loop: null, currentMood: "", heartbeat: null,
+        init() {
+            if (typeof Tone === 'undefined') return;
+            if (Tone.context.state !== 'running') Tone.start();
+            const reverb = new Tone.Reverb(4).toDestination();
+            this.synth = new Tone.PolySynth(Tone.Synth, { oscillator: { type: "sine" }, envelope: { attack: 2, release: 5 } }).connect(reverb);
+            this.synth.volume.value = -12;
+            this.heartbeat = new Tone.MembraneSynth().toDestination();
+            this.heartbeat.volume.value = -5;
+            Tone.Transport.start();
+        },
+        playHeartbeat() {
+            if (typeof Tone === 'undefined' || !this.heartbeat) return;
+            let time = Tone.now();
+            for(let i=0; i<6; i++) {
+                this.heartbeat.triggerAttackRelease("C1", "8n", time);
+                this.heartbeat.triggerAttackRelease("C1", "8n", time + 0.3);
+                time += 1.5;
+            }
+        },
+        setMood(moodStr) {
+            const mood = (moodStr || "peaceful").toLowerCase();
+            if (this.currentMood === mood) return;
+            this.currentMood = mood;
+            document.getElementById('audioText').innerText = `BGM: ${mood.toUpperCase()}`;
+            if (this.loop) this.loop.stop();
+            let notes, interval;
+            if (mood.includes("dark") || mood.includes("tense") || mood.includes("crisis")) { notes = ["C2", "Eb2", "Gb2"]; interval = "2n"; document.getElementById('audioInd').style.color = '#ff4444'; }
+            else if (mood.includes("epic") || mood.includes("grand")) { notes = ["C3", "G3", "C4"]; interval = "1n"; document.getElementById('audioInd').style.color = '#d4af37';}
+            else { notes = ["C3", "D3", "E3", "A3"]; interval = "1m"; document.getElementById('audioInd').style.color = '#00f0ff';}
+            if (typeof Tone === 'undefined' || !this.synth) return;
+            this.loop = new Tone.Loop(time => {
+                this.synth.triggerAttackRelease(notes[Math.floor(Math.random() * notes.length)], "2n", time);
+            }, interval).start(0);
+        },
+        playOpenEyesAnimation() {
+            const overlay = document.getElementById('eyeOverlay');
+            overlay.style.display = 'flex';
+            setTimeout(() => { overlay.classList.add('eyes-open'); }, 1000);
+            setTimeout(() => { overlay.style.display = 'none'; overlay.classList.remove('eyes-open'); }, 4000);
+        }
+    };
+
+    function readConfig() {
+        let rawKey = document.getElementById('inpApiKey').value.trim();
+        CTX.key = rawKey.replace(/[^\x20-\x7E]/g, '');
+        CTX.proxyUrl = document.getElementById('inpProxy').value.trim();
+        CTX.idleMinutes = parseInt(document.getElementById('inpIdle').value) || 3;
+        if (CTX.idleMinutes < 1) CTX.idleMinutes = 1;
+        if (CTX.idleMinutes > 30) CTX.idleMinutes = 30;
+        const provider = document.getElementById('selProvider').value;
+        CTX.endpoint = MODEL_DB[provider].endpoint;
+        CTX.model = document.getElementById('selModel').value;
+    }
+
+    function validateKey() {
+        readConfig();
+        if(!CTX.key) {
+            document.getElementById('bootError').innerText = "需要引擎密令 (API KEY)。";
+            return false;
+        }
+        return true;
+    }
+
+    // ==========================================
+    // 构建包含世界状态的 System Prompt
+    // ==========================================
+    function buildWorldPrompt() {
+        let locs = WORLD.locations.map((l, i) => `${i+1}. ${l.name}：${l.desc}`).join('\n');
+        let mem = WORLD.memory ? `\n## 长期记忆\n${WORLD.memory}` : "";
+
+        return `你是一个硬核文字游戏引擎。你同时负责叙事和更新世界状态。
+
+## 世界法则
+${WORLD.rules}
+
+## 玩家状态
+身份：${WORLD.player.identity}
+执念：${WORLD.player.goal}
+特质：[${WORLD.player.traits.join(', ')}]
+物品：[${WORLD.player.inventory.join(', ')}]
+生命值：${WORLD.player.stats.hp}/100
+理智值：${WORLD.player.stats.sanity}/100
+能量值：${WORLD.player.stats.energy}/100
+
+## 已探索地点
+${locs || '(尚无)'}
+
+## 世界标记
+${Object.keys(WORLD.flags).length ? JSON.stringify(WORLD.flags) : '(尚无)'}${mem}
+
+## 叙事风格
+${WORLD.style}
+
+## 输出规则
+1. 根据玩家行动推演后续，不超过150字，合理穿插Emoji。
+2. 如果玩家长时间未行动，请制造环境突变或危机。
+3. 每次回复结尾必须以 [STATE] 开头，紧跟JSON描述状态变更。
+   [STATE]JSON格式示例：
+   {"stats":{"sanity":-5,"hp":-10},"traits":["获得新特质"],"inventory":["获得物品"],"flags":{"flag名":true},"locations":[{"name":"地点名","desc":"地点描述"}],"timeline":{"event":"当前事件摘要"},"mood":"tense"}
+4. 只有发生变化的字段才需要出现在JSON中。stats使用增量(正数增加，负数减少)。
+5. emotions字段可附带：结尾附带情感指令如 [MOOD: tense/peaceful/epic/dark]。`;
+    }
+
+    // ==========================================
+    // 解析 AI 返回中的 [STATE] JSON（支持嵌套花括号）
+    // ==========================================
+    function extractStateJSON(content) {
+        const idx = content.indexOf('[STATE]');
+        if (idx === -1) return null;
+        const after = content.substring(idx + 7);
+        const braceStart = after.indexOf('{');
+        if (braceStart === -1) return null;
+        let depth = 0, pos = braceStart;
+        for (; pos < after.length; pos++) {
+            if (after[pos] === '{') depth++;
+            else if (after[pos] === '}') { depth--; if (depth === 0) { pos++; break; } }
+        }
+        if (depth !== 0) return null;
+        const jsonStr = after.substring(braceStart, pos);
+        try { return { json: JSON.parse(jsonStr), raw: after.substring(braceStart, pos) }; }
+        catch(e) { console.warn("STATE parse error:", e.message); return null; }
+    }
+
+    function parseStateChange(content) {
+        const result = extractStateJSON(content);
+        return result ? result.json : null;
+    }
+
+    function applyStateChange(state) {
+        if (!state) return;
+        if (state.stats) {
+            for (const key of Object.keys(state.stats)) {
+                if (WORLD.player.stats[key] !== undefined) {
+                    WORLD.player.stats[key] = Math.max(0, Math.min(100, WORLD.player.stats[key] + state.stats[key]));
+                }
+            }
+        }
+        if (state.traits) {
+            for (const t of state.traits) {
+                if (!WORLD.player.traits.includes(t)) WORLD.player.traits.push(t);
+            }
+        }
+        if (state.inventory) {
+            for (const item of state.inventory) {
+                if (!WORLD.player.inventory.includes(item)) WORLD.player.inventory.push(item);
+            }
+        }
+        if (state.flags) {
+            Object.assign(WORLD.flags, state.flags);
+        }
+        if (state.locations) {
+            for (const loc of state.locations) {
+                if (!WORLD.locations.find(l => l.name === loc.name)) {
+                    WORLD.locations.push(loc);
+                }
+            }
+        }
+        if (state.timeline && state.timeline.event) {
+            WORLD.timeline.push({ turn: WORLD.turn, event: state.timeline.event });
+            if (WORLD.timeline.length > 30) WORLD.timeline = WORLD.timeline.slice(-30);
+        }
+        if (state.mood) {
+            AudioVisual.setMood(state.mood);
+        }
+        if (state.stats) {
+            renderWorldState();
+        }
+    }
+
+    // ==========================================
+    // 渲染侧边栏世界状态
+    // ==========================================
+    function renderWorldState() {
+        const s = WORLD.player.stats;
+        document.getElementById('statsDisplay').innerHTML = `
+            <div class="stat-row"><span class="stat-label">HP</span><div class="stat-bar"><div class="stat-fill hp" style="width:${s.hp}%"></div></div><span class="stat-val">${s.hp}</span></div>
+            <div class="stat-row"><span class="stat-label">理智</span><div class="stat-bar"><div class="stat-fill sanity" style="width:${s.sanity}%"></div></div><span class="stat-val">${s.sanity}</span></div>
+            <div class="stat-row"><span class="stat-label">能量</span><div class="stat-bar"><div class="stat-fill energy" style="width:${s.energy}%"></div></div><span class="stat-val">${s.energy}</span></div>
+        `;
+
+        document.getElementById('traitsDisplay').innerHTML =
+            (WORLD.player.traits.length ? WORLD.player.traits.map(t => `<span class="tag">${t}</span>`).join('') : '<span style="color:#555;font-size:0.75em;">尚未获得</span>') +
+            (WORLD.player.inventory.length ? '<br>' + WORLD.player.inventory.map(i => `<span class="tag-item">${i}</span>`).join('') : '');
+
+        document.getElementById('detailWorld').innerText = WORLD.rules || '未设定';
+        document.getElementById('detailPersona').innerHTML =
+            `<b>身份：</b>${WORLD.player.identity || '未设定'}<br><b>执念：</b>${WORLD.player.goal || '未设定'}`;
+        document.getElementById('detailStyle').innerText = WORLD.style || '未设定';
+
+        if (WORLD.locations.length) {
+            document.getElementById('detailLocations').innerHTML = WORLD.locations.map(l =>
+                `<div style="margin:4px 0;">📍 <b>${l.name}</b><br><span style="color:#777;">${l.desc}</span></div>`
+            ).join('');
+        }
+
+        if (WORLD.timeline.length) {
+            document.getElementById('detailTimeline').innerHTML = WORLD.timeline.slice(-15).map(t =>
+                `<div class="timeline-item"><span class="timeline-turn">#${t.turn}</span>${t.event}</div>`
+            ).join('');
+        }
+
+        // 同步到覆写面板
+        document.getElementById('editWorld').value = WORLD.rules;
+        document.getElementById('editPersona').value = `${WORLD.player.identity} | ${WORLD.player.goal}`;
+        document.getElementById('editStyle').value = WORLD.style;
+    }
+
+    // ==========================================
+    // 长期记忆压缩
+    // ==========================================
+    async function compressMemory() {
+        if (CTX.history.length < 24) return;
+
+        const oldMessages = CTX.history.slice(0, CTX.history.length - 8);
+        const recentMessages = CTX.history.slice(CTX.history.length - 8);
+
+        const sysCompress = `你是一个文字游戏引擎的世界记录官。请将以下对话历史压缩为一段连贯的【长期记忆】（200字以内），保留关键事件、人物关系、世界观发现和玩家的重要决策。用第三人称叙述。`;
+
+        try {
+            const url = CTX.proxyUrl ? CTX.proxyUrl + CTX.endpoint : CTX.endpoint;
+            const res = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${CTX.key}` },
+                body: JSON.stringify({
+                    model: CTX.model,
+                    messages: [
+                        { role: "system", content: sysCompress },
+                        ...oldMessages
+                    ],
+                    temperature: 0.5,
+                    max_tokens: 500
+                })
+            });
+            if (!res.ok) throw new Error("压缩失败");
+            const data = await res.json();
+            const compressed = data.choices[0].message.content.trim();
+
+            WORLD.memory = WORLD.memory
+                ? WORLD.memory + '\n' + compressed
+                : compressed;
+
+            CTX.history = recentMessages;
+        } catch(e) {
+            console.warn("记忆压缩失败:", e.message);
+        }
+    }
+
+    // ==========================================
+    // fetchAI（升级版：含状态解析 + 压缩触发）
+    // ==========================================
+    async function fetchAI(prompt, systemPrompt) {
+        const url = CTX.proxyUrl ? CTX.proxyUrl + CTX.endpoint : CTX.endpoint;
+        const messages = [{ role: "system", content: systemPrompt }, ...CTX.history, { role: "user", content: prompt }];
+        const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${CTX.key}` },
+            body: JSON.stringify({ model: CTX.model, messages: messages, temperature: 0.8 })
+        });
+        if (!res.ok) throw new Error(`神经连接异常: ${await res.text()}`);
+
+        const data = await res.json();
+        const content = data.choices[0].message.content;
+
+        // 解析并应用世界状态变更
+        const state = parseStateChange(content);
+        if (state) {
+            applyStateChange(state);
+            if (state.mood) {
+                // 已经由 applyStateChange 处理了
+            } else {
+                // 兼容旧版 [MOOD: ...] 标记
+                const moodMatch = content.match(/\[MOOD:\s*([a-zA-Z]+)\]/i);
+                if (moodMatch) AudioVisual.setMood(moodMatch[1]);
+            }
+        } else {
+            // 兼容旧版 [MOOD: ...] 标记
+            const moodMatch = content.match(/\[MOOD:\s*([a-zA-Z]+)\]/i);
+            if (moodMatch) AudioVisual.setMood(moodMatch[1]);
+        }
+
+        CTX.history.push({ role: "user", content: prompt });
+        CTX.history.push({ role: "assistant", content: content });
+        if (CTX.history.length > 50) {
+            await compressMemory();
+        }
+
+        CTX.fullLog += `\n[玩家]: ${prompt}\n[AI]: ${content}\n`;
+
+        return content;
+    }
+
+    // ==========================================
+    // fetchAIStream — 流式版本，逐块回调 onChunk
+    // ==========================================
+    async function fetchAIStream(prompt, systemPrompt, onChunk) {
+        const url = CTX.proxyUrl ? CTX.proxyUrl + CTX.endpoint : CTX.endpoint;
+        const messages = [{ role: "system", content: systemPrompt }, ...CTX.history, { role: "user", content: prompt }];
+        const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${CTX.key}` },
+            body: JSON.stringify({ model: CTX.model, messages, temperature: 0.8, stream: true })
+        });
+        if (!res.ok) throw new Error(`神经连接异常: ${await res.text()}`);
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let fullContent = "", buffer = "";
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || "";
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const data = line.slice(6).trim();
+                if (data === '[DONE]') continue;
+                try {
+                    const parsed = JSON.parse(data);
+                    const delta = parsed.choices?.[0]?.delta?.content || "";
+                    if (delta) { fullContent += delta; onChunk(delta); }
+                } catch(e) { /* skip malformed SSE lines */ }
+            }
+        }
+
+        // 流结束后处理状态变更
+        const state = parseStateChange(fullContent);
+        if (state) {
+            applyStateChange(state);
+        } else {
+            const moodMatch = fullContent.match(/\[MOOD:\s*([a-zA-Z]+)\]/i);
+            if (moodMatch) AudioVisual.setMood(moodMatch[1]);
+        }
+
+        CTX.history.push({ role: "user", content: prompt });
+        CTX.history.push({ role: "assistant", content: fullContent });
+        if (CTX.history.length > 50) await compressMemory();
+        CTX.fullLog += `\n[玩家]: ${prompt}\n[AI]: ${fullContent}\n`;
+
+        return fullContent;
+    }
+
+    // ==========================================
+    // 命运之轮：AI 随机生成四维设定
+    // ==========================================
+    async function rollField(targetId, sysMsg) {
+        if(!validateKey()) return;
+        showLoading();
+        try {
+            const h = CTX.history; CTX.history = []; CTX.fullLog = "";
+            const res = await fetchAI("生成设定", sysMsg);
+            let j = res.replace(/```json/gi,'').replace(/```/g,'').trim();
+            j = j.substring(j.indexOf('{'), j.lastIndexOf('}')+1);
+            const d = JSON.parse(j);
+            document.getElementById(targetId).value = d.value || Object.values(d)[0];
+            CTX.history = h; CTX.fullLog = "";
+        } catch(e) { alert("生成失败："+e.message); }
+        finally { hideLoading(); }
+    }
+    async function rollWorld() {
+        rollField('inpWorld',`你是一位中文网文世界架构师。请随机生成一个吸引人的世界背景（15-25字），必须是中文叙事主流类型：玄幻、仙侠、武侠、科幻、悬疑、盗墓、宫斗、都市异能、末日废土、历史权谋、中式克苏鲁等。JSON格式：{"world":"..."}"`);
+    }
+    async function rollStyle() {
+        const w = document.getElementById('inpWorld').value.trim();
+        if(!w) return alert('请先生成世界法则');
+        rollField('inpStyle',`当前世界背景："${w}"。请选择最适合这个世界法则的叙事风格（如：仙侠/悬疑/赛博朋克/克苏鲁/史诗奇幻/末日废土/武侠等），氛围必须与世界法则高度契合。JSON格式：{"style":"..."}"`);
+    }
+    async function rollPersona() {
+        const w = document.getElementById('inpWorld').value.trim();
+        const s = document.getElementById('inpStyle').value.trim();
+        if(!w) return alert('请先生成世界法则');
+        if(!s) return alert('请先生成叙事风格');
+        rollField('inpPersona',`当前设定：世界="${w}"，风格="${s}"。请生成一个身份（8-15字），必须既符合世界法则，又契合叙事风格，让玩家能自然代入。JSON格式：{"persona":"..."}"`);
+    }
+    async function rollGoal() {
+        const w = document.getElementById('inpWorld').value.trim();
+        const s = document.getElementById('inpStyle').value.trim();
+        const p = document.getElementById('inpPersona').value.trim();
+        if(!w||!s||!p) return alert('请先生成世界法则、叙事风格和身份');
+        rollField('inpGoal',`当前设定：世界="${w}"，风格="${s}"，身份="${p}"。请生成一个执念目标（10-20字），必须优先由身份推导，再符合世界法则，最后契合叙事风格。JSON格式：{"goal":"..."}"`);
+    }
+    async function rollDestiny() {
+        if(!validateKey()) return;
+        const btn = document.getElementById('btnDice');
+        btn.innerText = "命运纺线交织中 (AI生成中)...";
+        btn.disabled = true;
+        showLoading();
+
+        const sys = `你是一位中文网文/影视/游戏的世界架构师。请随机生成一套完整的文字游戏设定，要求：
+1. 灵感来源必须是中文叙事作品的主流类型：玄幻、仙侠、武侠、科幻、悬疑、盗墓、宫斗、都市异能、末日废土、历史权谋、克苏鲁中式改编等。
+2. 四个维度的推导逻辑为：世界法则→叙事风格→你的身份→初始执念。叙事风格必须符合世界法则；身份必须既符合世界法则又契合叙事风格；执念必须由身份推导，再符合世界法则，最后契合叙事风格。
+3. 不要生成孤立或抽象的概念，要让玩家一眼就能脑补出一部小说或游戏的序幕。
+严格以JSON格式返回，不要任何markdown标记：
+{"world":"世界背景(20字)","style":"叙事风格","persona":"玩家身份(10字)","goal":"玩家执念(15字)"}`;
+
+        try {
+            // 用独立 context 调用，避免污染主历史
+            const savedHistory = CTX.history;
+            const savedLog = CTX.fullLog;
+            CTX.history = []; CTX.fullLog = "";
+
+            const res = await fetchAI("生成随机设定", sys);
+            let cleanJson = res.replace(/```json/gi, '').replace(/```/g, '').trim();
+            cleanJson = cleanJson.substring(cleanJson.indexOf('{'), cleanJson.lastIndexOf('}') + 1);
+            const data = JSON.parse(cleanJson);
+
+            document.getElementById('inpWorld').value = data.world;
+            document.getElementById('inpPersona').value = data.persona;
+            document.getElementById('inpGoal').value = data.goal;
+            document.getElementById('inpStyle').value = data.style;
+
+            CTX.history = savedHistory;
+            CTX.fullLog = savedLog;
+        } catch(e) {
+            alert("命运扭曲失败：" + e.message);
+        } finally {
+            btn.innerText = "🎲 掷入命运之轮 (AI随机生成全套脑洞)";
+            btn.disabled = false;
+            hideLoading();
+        }
+    }
+
+    // ==========================================
+    // 潜入序列
+    // ==========================================
+    async function startDiveSequence() {
+        const btn = document.getElementById('btnBoot');
+        if(!validateKey()) return;
+        showLoading();
+
+        try {
+            CTX.gameActive = true;
+            WORLD.rules = document.getElementById('inpWorld').value;
+            WORLD.player.identity = document.getElementById('inpPersona').value;
+            WORLD.player.goal = document.getElementById('inpGoal').value;
+            WORLD.style = document.getElementById('inpStyle').value;
+            WORLD.player.stats = { hp: 100, sanity: 100, energy: 100 };
+            WORLD.locations = [];
+            WORLD.flags = {};
+            WORLD.timeline = [];
+            WORLD.memory = "";
+            WORLD.turn = 0;
+
+            btn.disabled = true; btn.innerText = "潜入序列启动..."; document.getElementById('bootError').innerText = "";
+
+            if (typeof Tone !== 'undefined') AudioVisual.init();
+            document.getElementById('eyeOverlay').style.display = 'flex';
+            if (typeof Tone !== 'undefined') AudioVisual.playHeartbeat();
+
+            const sysArch = buildWorldPrompt() + `\n【重要】：你必须以一个【紧急危机】作为开局！不要让玩家平淡地醒来，玩家一睁眼必须面临一个紧迫的威胁、冲突或未知的危险。字数约200字。`;
+
+            document.getElementById('screenSetup').classList.remove('active');
+            document.getElementById('screenGame').classList.add('active');
+            WORLD.turn = 0;
+            renderWorldState();
+            AudioVisual.playOpenEyesAnimation();
+
+            // 流式输出开局
+            const streamEl = document.getElementById('stream');
+            const nodeDiv = document.createElement('div');
+            nodeDiv.className = 'node node-ai';
+            const contentDiv = document.createElement('div');
+            nodeDiv.appendChild(contentDiv);
+            streamEl.appendChild(nodeDiv);
+
+            let accumulated = "";
+            await fetchAIStream("唤醒", sysArch, (chunk) => {
+                accumulated += chunk;
+                contentDiv.innerHTML = accumulated.replace(/\s*\[STATE\]\s*\{[\s\S]*?\}\s*/g, '').replace(/\[MOOD:[^\]]+\]/gi, '').trim().replace(/\n/g, '<br>');
+                streamEl.scrollTop = streamEl.scrollHeight;
+            });
+
+            contentDiv.innerHTML = cleanDisplayText(accumulated);
+            resetIdleTimer();
+
+        } catch (e) {
+            document.getElementById('bootError').innerText = e.message; btn.disabled = false; btn.innerText = "👁️ 连接神经突触 (进入世界)";
+            document.getElementById('eyeOverlay').style.display = 'none';
+        } finally {
+            hideLoading();
+        }
+    }
+
+    function overrideSettings() {
+        WORLD.rules = document.getElementById('editWorld').value;
+        WORLD.player.identity = document.getElementById('editPersona').value.split('|')[0].trim();
+        WORLD.player.goal = document.getElementById('editPersona').value.split('|')[1]?.trim() || WORLD.player.goal;
+        WORLD.style = document.getElementById('editStyle').value;
+        renderWorldState();
+    }
+
+    // ==========================================
+    // 玩家行动
+    // ==========================================
+    async function processAction(isIdleEvent = false) {
+        const inp = document.getElementById('inpAction');
+        const btn = document.getElementById('btnAction');
+        let action = inp.value.trim();
+
+        if(!isIdleEvent && !action) return;
+        clearTimeout(idleTimer);
+
+        if (!CTX.key) {
+            inp.placeholder = "请先在设置面板填入 API Key 以连接引擎...";
+            inp.disabled = btn.disabled = false;
+            if (!isIdleEvent) resetIdleTimer();
+            return;
+        }
+
+        WORLD.turn++;
+
+        if (!isIdleEvent) {
+            inp.value = ''; inp.disabled = btn.disabled = true;
+            document.getElementById('stream').innerHTML += `<div class="node node-player">>> ${action}</div>`;
+            document.getElementById('stream').scrollTop = document.getElementById('stream').scrollHeight;
+        } else {
+            inp.disabled = btn.disabled = true;
+            action = "【玩家长时间未做出反应，似乎陷入了呆滞】";
+        }
+
+        const sysPrompt = buildWorldPrompt();
+
+        try {
+            if (typeof Tone !== 'undefined' && Tone.context.state !== 'running') Tone.start();
+
+            // 创建流式响应节点
+            const streamEl = document.getElementById('stream');
+            const nodeDiv = document.createElement('div');
+            nodeDiv.className = 'node node-ai';
+            const contentDiv = document.createElement('div');
+            nodeDiv.appendChild(contentDiv);
+            streamEl.appendChild(nodeDiv);
+            streamEl.scrollTop = streamEl.scrollHeight;
+
+            let accumulated = "";
+            const content = await fetchAIStream(action, sysPrompt, (chunk) => {
+                accumulated += chunk;
+                // 实时显示时过滤掉 [STATE] 和 [MOOD]（只在末尾出现，不影响前面）
+                contentDiv.innerHTML = accumulated.replace(/\s*\[STATE\]\s*\{[\s\S]*?\}\s*/g, '').replace(/\[MOOD:[^\]]+\]/gi, '').trim().replace(/\n/g, '<br>');
+                streamEl.scrollTop = streamEl.scrollHeight;
+            });
+
+            // 流结束，最终清理显示内容
+            contentDiv.innerHTML = cleanDisplayText(content);
+            renderWorldState();
+        } catch (e) {
+            document.getElementById('stream').innerHTML += `<div class="node" style="color:#ff4444;">[世界裂隙] ${e.message}</div>`;
+        } finally {
+            inp.disabled = btn.disabled = false; inp.focus();
+            resetIdleTimer();
+        }
+    }
+
+    // 从 AI 文本中剥离 [STATE]{...} 和 [MOOD:...] 用于显示
+    function cleanDisplayText(content) {
+        let text = content;
+        const idx = text.indexOf('[STATE]');
+        if (idx >= 0) {
+            const after = text.substring(idx + 7);
+            const bracePos = after.indexOf('{');
+            if (bracePos >= 0) {
+                let depth = 0, endPos = bracePos;
+                for (; endPos < after.length; endPos++) {
+                    if (after[endPos] === '{') depth++;
+                    else if (after[endPos] === '}') { depth--; if (depth === 0) { endPos++; break; } }
+                }
+                text = (text.substring(0, idx) + after.substring(endPos)).trim();
+            }
+        }
+        return text.replace(/\[MOOD:\s*[a-zA-Z]+\]/gi, '').trim();
+    }
+
+    function appendAIStory(content) {
+        const stream = document.getElementById('stream');
+        stream.innerHTML += `<div class="node node-ai"><div>${cleanDisplayText(content).replace(/\n/g, '<br>')}</div></div>`;
+        stream.scrollTop = stream.scrollHeight;
+    }
+
+    // ==========================================
+    // 闲置自动触发系统（可配置分钟数）
+    function resetIdleTimer() {
+        clearTimeout(idleTimer);
+        document.getElementById('inpAction').placeholder = "世界在等你行动，输入决定并按 Enter...";
+        const ms = (CTX.idleMinutes || 3) * 60 * 1000;
+        idleTimer = setTimeout(() => {
+            if (document.getElementById('inpAction').value.trim() !== '') {
+                resetIdleTimer();
+                return;
+            }
+            document.getElementById('inpAction').placeholder = `时间流逝（已闲置 ${CTX.idleMinutes} 分钟）...世界正在发生变化！`;
+            processAction(true);
+        }, ms);
+    }
+
+    // ==========================================
+    // 存档与史诗结算
+    // ==========================================
+    async function crystallizeWorld() {
+        const modal = document.getElementById('epicModal');
+        const titleEl = document.getElementById('epicTitle');
+        const textEl = document.getElementById('epicText');
+        const actionsEl = document.getElementById('epicActions');
+
+        modal.style.display = 'flex';
+        actionsEl.style.display = 'none';
+        titleEl.innerText = "虚空凝结中...";
+        textEl.innerHTML = "时空记录者正在回溯你的旅程，提炼这个独一无二的宇宙。<br><br><i>(需要处理全局因果记录，请等待...)</i>";
+
+        AudioVisual.setMood('epic');
+        showLoading();
+
+        const sysEpicPrompt = `你是一位吟游诗人和史学家。请根据玩家的旅程记录，撰写一篇宏大、优美的【世界总结】（300-500字）。
+要求：1.总结地貌法则和世界格局。2.总结主角的传奇抉择与成长。
+3.提及主角获得的特质和关键物品。
+返回格式：
+# 《充满史诗感的世界名字》
+(正文叙述...)`;
+
+        try {
+            const url = CTX.proxyUrl ? CTX.proxyUrl + CTX.endpoint : CTX.endpoint;
+
+            // 构建一份世界概览给 AI
+            const worldSummary = `世界法则：${WORLD.rules}
+玩家：${WORLD.player.identity}（执念：${WORLD.player.goal}）
+最终特质：[${WORLD.player.traits.join(', ')}]
+最终物品：[${WORLD.player.inventory.join(', ')}]
+探索地点：${WORLD.locations.map(l => l.name).join('、')}
+旅程回合数：${WORLD.turn}`;
+
+            const messages = [
+                { role: "system", content: sysEpicPrompt },
+                ...CTX.history,
+                { role: "user", content: `世界概览：\n${worldSummary}\n\n历史记录：\n${CTX.fullLog}` }
+            ];
+            const res = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${CTX.key}` },
+                body: JSON.stringify({ model: CTX.model, messages, temperature: 0.8 })
+            });
+            if (!res.ok) throw new Error("结印失败，算力过载。");
+
+            const epicText = (await res.json()).choices[0].message.content;
+            const titleMatch = epicText.match(/# (.*)/);
+
+            CTX.epicTitle = titleMatch ? titleMatch[1] : "未名者的旅途";
+            titleEl.innerText = `《${CTX.epicTitle}》`;
+            textEl.innerHTML = epicText.replace(/# .*/, '').trim().replace(/\n/g, '<br>');
+
+            actionsEl.style.display = 'flex';
+            showShareSection();
+
+        } catch (e) {
+            titleEl.innerText = "史诗崩坏";
+            textEl.innerText = e.message;
+            actionsEl.style.display = 'flex';
+        } finally {
+            hideLoading();
+        }
+    }
+
+    function downloadSaveFile() {
+        const saveData = {
+            version: "8.0",
+            world: WORLD,
+            history: CTX.history,
+            fullLog: CTX.fullLog,
+            uiHTML: document.getElementById('stream').innerHTML
+        };
+        const blob = new Blob([JSON.stringify(saveData, null, 2)], {type: "application/json"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        let safeTitle = CTX.epicTitle ? CTX.epicTitle.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, "") : "";
+        if (!safeTitle) safeTitle = "UnnamedWorld";
+        a.download = `InfiniteStream_${safeTitle}_${new Date().getTime()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // ==========================================
+    // 分享链接生成
+    // ==========================================
+    function generateShareUrl() {
+        const settings = {
+            w: WORLD.rules,
+            p: WORLD.player.identity,
+            g: WORLD.player.goal,
+            s: WORLD.style
+        };
+        try {
+            const encoded = btoa(encodeURIComponent(JSON.stringify(settings)));
+            return window.location.href.split('#')[0] + '#setup:' + encoded;
+        } catch(e) {
+            return window.location.href.split('#')[0];
+        }
+    }
+
+    function showShareSection() {
+        const section = document.getElementById('shareSection');
+        const url = generateShareUrl();
+        document.getElementById('shareUrl').value = url;
+
+        // 用 QR 码 API 生成二维码图片
+        const qrContainer = document.getElementById('qrcode');
+        qrContainer.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(url)}" alt="QR Code" style="width:180px;height:180px;">`;
+        section.style.display = 'block';
+    }
+
+    // 页面加载时解析 URL hash 预填设定
+    (function initFromHash() {
+        try {
+            const hash = window.location.hash;
+            if (hash.startsWith('#setup:')) {
+                const data = JSON.parse(decodeURIComponent(atob(hash.slice(7))));
+                if (data.w) document.getElementById('inpWorld').value = data.w;
+                if (data.p) document.getElementById('inpPersona').value = data.p;
+                if (data.g) document.getElementById('inpGoal').value = data.g;
+                if (data.s) document.getElementById('inpStyle').value = data.s;
+            }
+        } catch(e) { /* silent */ }
+    })();
+
+    // ==========================================
+    // 导出世界之书（电子书 HTML）
+    // ==========================================
+    function exportWorldBook() {
+        const title = CTX.epicTitle || "未名者的旅途";
+        const date = new Date().toLocaleString('zh-CN');
+        const rules = WORLD.rules || '未设定';
+        const identity = WORLD.player.identity || '未知';
+        const goal = WORLD.player.goal || '未知';
+        const style = WORLD.style || '未知';
+        const traits = WORLD.player.traits.length ? WORLD.player.traits.join('、') : '无';
+        const inventory = WORLD.player.inventory.length ? WORLD.player.inventory.join('、') : '无';
+        const stats = WORLD.player.stats;
+        const locs = WORLD.locations.map(l => `<li><b>${l.name}</b>：${l.desc}</li>`).join('\n');
+        const timeline = WORLD.timeline.map(t => `<tr><td style="color:#8b7355;padding:4px 8px;white-space:nowrap;">#${t.turn}</td><td style="padding:4px 8px;">${t.event}</td></tr>`).join('\n');
+
+        // 构建完整叙事日志（从 fullLog 提取纯叙述段落）
+        const logLines = CTX.fullLog.split('\n').filter(l => l.startsWith('[AI]:')).map(l => l.replace(/^\[AI\]:\s*/, '').replace(/\s*\[STATE\]\{.*?\}/, '').replace(/\[MOOD:[^\]]+\]/g, '').trim()).filter(Boolean);
+        const narrativeHtml = logLines.map(p => `<p style="text-indent:2em;line-height:2;margin:0.8em 0;">${p}</p>`).join('\n');
+
+        const shareUrl = generateShareUrl();
+
+        const bookHtml = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>《${title}》 — 世界之书</title>
+<style>
+body { background: #f5f0e8; color: #2c1810; font-family: 'Noto Serif SC', 'SimSun', serif; max-width: 780px; margin: 0 auto; padding: 40px 20px 80px; }
+.cover { text-align: center; padding: 100px 0 60px; border-bottom: 2px solid #8b7355; margin-bottom: 40px; }
+.cover h1 { font-size: 42px; letter-spacing: 6px; color: #4a3728; margin-bottom: 10px; }
+.cover .subtitle { font-size: 16px; color: #8b7355; letter-spacing: 3px; }
+.cover .meta { font-size: 13px; color: #999; margin-top: 20px; }
+h2 { font-size: 20px; color: #4a3728; border-bottom: 1px solid #d4c5a9; padding-bottom: 6px; margin: 32px 0 16px; letter-spacing: 2px; }
+.section { margin: 20px 0; }
+.stat-grid { display: flex; gap: 20px; justify-content: center; margin: 16px 0; }
+.stat-card { background: #ede7db; border-radius: 8px; padding: 12px 20px; text-align: center; min-width: 80px; }
+.stat-card .val { font-size: 24px; font-weight: bold; color: #4a3728; }
+.stat-card .lbl { font-size: 12px; color: #8b7355; }
+.tag { display: inline-block; background: #ede7db; padding: 2px 12px; border-radius: 10px; font-size: 13px; margin: 3px; }
+table { width: 100%; border-collapse: collapse; }
+tr:nth-child(even) { background: #ede7db; }
+.footer { text-align: center; margin-top: 60px; padding: 20px; border-top: 1px solid #d4c5a9; font-size: 13px; color: #999; }
+.share-block { text-align: center; margin: 30px 0; padding: 20px; background: #ede7db; border-radius: 8px; }
+.share-block img { display: inline-block; background: #fff; padding: 8px; border-radius: 4px; }
+.share-block a { color: #4a3728; word-break: break-all; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+<h1>《${title}》</h1>
+<p class="subtitle">玩家与 AI 共同谱写的无限旅途</p>
+<p class="meta">📅 ${date} &nbsp;|&nbsp; ⚡ ${WORLD.turn} 回合 &nbsp;|&nbsp; 📝 ${logLines.length} 段叙述</p>
+</div>
+
+<h2>🌍 世界概览</h2>
+<div class="section">
+<p><b>世界法则：</b>${rules}</p>
+<p><b>主角身份：</b>${identity}</p>
+<p><b>执念目标：</b>${goal}</p>
+<p><b>叙事风格：</b>${style}</p>
+</div>
+
+<h2>🧬 最终状态</h2>
+<div class="stat-grid">
+<div class="stat-card"><div class="val">${stats.hp}</div><div class="lbl">HP</div></div>
+<div class="stat-card"><div class="val">${stats.sanity}</div><div class="lbl">理智</div></div>
+<div class="stat-card"><div class="val">${stats.energy}</div><div class="lbl">能量</div></div>
+</div>
+<p><b>特质：</b>${traits}</p>
+<p><b>物品：</b>${inventory}</p>
+
+<h2>📍 探索地点</h2>
+<ul>${locs || '<li style="color:#999;">无</li>'}</ul>
+
+<h2>⏳ 旅程时间线</h2>
+<table>${timeline || '<tr><td style="color:#999;">无记录</td></tr>'}</table>
+
+<h2>📜 旅途叙事</h2>
+${narrativeHtml || '<p style="color:#999;">尚无叙述记录</p>'}
+
+<div class="share-block">
+<p style="font-size:14px;color:#4a3728;margin-bottom:12px;">✨ 你也想开启这个世界的旅途吗？</p>
+<img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(shareUrl)}" alt="QR Code">
+<p style="margin-top:8px;"><a href="${shareUrl}" target="_blank">${shareUrl}</a></p>
+</div>
+
+<div class="footer">
+<p>由 Infinite Stream Engine 生成 · ${date}</p>
+<p style="font-size:11px;">每一个世界都是独一无二的，因为玩家与AI共同缔造了它。</p>
+</div>
+
+</body>
+</html>`;
+
+        const blob = new Blob([bookHtml], {type: "text/html;charset=utf-8"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        let safeTitle = title.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, "");
+        if (!safeTitle) safeTitle = "WorldBook";
+        a.download = `${safeTitle}_世界之书.html`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // ==========================================
+    // 场景图像生成 (Pollinations.ai 免费 API)
+    // ==========================================
+    let lastScenePrompt = "";
+
+    async function generateSceneImage(customPrompt) {
+        if (typeof Tone !== 'undefined' && Tone.context.state !== 'running') Tone.start();
+
+        // 取最近一段 AI 叙述作为图像 prompt 来源
+        const stream = document.getElementById('stream');
+        const aiNodes = stream.querySelectorAll('.node-ai');
+        let sourceText = customPrompt || "";
+
+        if (!sourceText && aiNodes.length > 0) {
+            const lastNode = aiNodes[aiNodes.length - 1];
+            sourceText = lastNode.innerText || lastNode.textContent || "";
+        }
+
+        if (!sourceText) {
+            sourceText = WORLD.rules + " " + WORLD.style;
+        }
+
+        // 截取前 200 字作为 prompt
+        let prompt = sourceText.replace(/[\[\]]/g, '').trim().slice(0, 200);
+        if (prompt.length < 10) prompt = "Fantasy world " + WORLD.rules;
+
+        // 风格增强
+        const styleHint = WORLD.style.includes('克苏鲁') ? 'Lovecraftian horror' :
+                          WORLD.style.includes('赛博') ? 'cyberpunk' :
+                          WORLD.style.includes('科幻') ? 'sci-fi' : 'fantasy';
+
+        const fullPrompt = `${prompt}, digital art, ${styleHint}, atmospheric lighting, ultra detailed`;
+
+        showLoading();
+        try {
+            const imgProvider = document.getElementById('selImageProvider').value;
+            let imgUrl;
+            if (imgProvider === 'custom') {
+                const imgEndpoint = document.getElementById('inpImageEndpoint').value.trim();
+                const imgKey = document.getElementById('inpImageKey').value.trim();
+                const imgModel = document.getElementById('inpImageModel').value.trim() || "dall-e-3";
+                if (!imgEndpoint) throw new Error("请填写自定义图像 API 地址");
+                const res = await fetch(imgEndpoint, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": imgKey ? `Bearer ${imgKey}` : '' },
+                    body: JSON.stringify({ model: imgModel, prompt: fullPrompt, n: 1, size: "1024x1024" })
+                });
+                if (!res.ok) throw new Error(`图像 API 错误: ${await res.text()}`);
+                const data = await res.json();
+                imgUrl = data.data?.[0]?.url || data.data?.[0]?.b64_json;
+                if (!imgUrl) throw new Error("图像 API 返回格式异常");
+            } else {
+                imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(fullPrompt)}?width=768&height=432&nofeed=true`;
+            }
+
+            // 插入图片节点到故事流
+            const imgDiv = document.createElement('div');
+            imgDiv.className = 'node node-ai';
+            imgDiv.innerHTML = `<img class="scene-image" src="${imgUrl}" alt="场景图像" onload="this.classList.add('loaded')" onerror="this.outerHTML='<span style=\\'color:#ff4444;font-size:0.8em;\\'>[图像生成失败]</span>'">`;
+            stream.appendChild(imgDiv);
+            stream.scrollTop = stream.scrollHeight;
+
+            lastScenePrompt = fullPrompt;
+        } catch(e) {
+            stream.innerHTML += `<div class="node" style="color:#ff4444;font-size:0.8em;">[图像生成失败] ${e.message}</div>`;
+        } finally {
+            hideLoading();
+        }
+    }
+
+    function handleLoadGame(event) {
+        const file = event.target.files[0];
+        if(!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (data.world) {
+                    Object.assign(WORLD, data.world);
+                } else if (data.worldRules) {
+                    // 兼容旧版 7.x 存档
+                    WORLD.rules = data.worldRules || "";
+                    WORLD.player.identity = data.persona ? data.persona.replace(/^身份：/, '').replace(/ \| 执念.*/, '') : "";
+                    WORLD.player.goal = data.persona ? (data.persona.match(/执念\/目标：(.+)/) || [, ""])[1] : "";
+                    WORLD.style = data.style || "未知";
+                } else {
+                    throw new Error("存档格式不兼容。");
+                }
+                CTX.history = data.history || [];
+                CTX.fullLog = data.fullLog || "";
+
+                document.getElementById('stream').innerHTML = `<div class="node node-ai">>> 存档恢复成功，记忆锚点已重新建立。</div>`;
+                if (data.uiHTML) {
+                    document.getElementById('stream').innerHTML += data.uiHTML;
+                }
+
+                document.getElementById('screenSetup').classList.remove('active');
+                document.getElementById('screenGame').classList.add('active');
+
+                renderWorldState();
+
+                if (typeof Tone !== 'undefined') AudioVisual.init();
+                AudioVisual.setMood('peaceful');
+                document.getElementById('stream').scrollTop = document.getElementById('stream').scrollHeight;
+
+                if (document.getElementById('inpApiKey').value.trim()) {
+                    readConfig();
+                    resetIdleTimer();
+                } else {
+                    document.getElementById('inpAction').placeholder = "请先在上方面板填入 API Key 再行动...";
+                }
+
+            } catch(err) {
+                document.getElementById('bootError').innerText = "读取世界内核失败：" + err.message;
+            } finally { document.getElementById('fileLoad').value = ""; }
+        };
+        reader.readAsText(file);
+    }
+</script>
+</body>
+</html>
